@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io"
-
 	ipld "github.com/ipfs/go-ipld-format"
 	mdag "github.com/ipfs/go-merkledag"
 	unixfs "github.com/ipfs/go-unixfs"
+	"io"
+	"metrics"
 )
 
 // Common errors
@@ -253,7 +253,6 @@ func (dr *dagReader) readNodeDataBuffer(out []byte) int {
 // TODO: Check what part of the logic between the two functions
 // can be extracted away.
 func (dr *dagReader) writeNodeDataBuffer(w io.Writer) (int64, error) {
-
 	n, err := dr.currentNodeData.WriteTo(w)
 	if err != nil {
 		return n, err
@@ -278,6 +277,7 @@ func (dr *dagReader) writeNodeDataBuffer(w io.Writer) (int64, error) {
 // TODO: This implementation is very similar to `CtxReadFull`,
 // the common parts should be abstracted away.
 func (dr *dagReader) WriteTo(w io.Writer) (n int64, err error) {
+
 	// Use the internal reader's context to fetch the child node promises
 	// (see `ipld.NavigableIPLDNode.FetchChild` for details).
 	dr.dagWalker.SetContext(dr.ctx)
@@ -290,13 +290,13 @@ func (dr *dagReader) WriteTo(w io.Writer) (n int64, err error) {
 			return n, err
 		}
 	}
-
 	// Iterate the DAG calling the passed `Visitor` function on every node
 	// to read its data into the `out` buffer, stop if there is an error or
 	// if the entire DAG is traversed (`EndOfDag`).
 	err = dr.dagWalker.Iterate(func(visitedNode ipld.NavigableNode) error {
 		node := ipld.ExtractIPLDNode(visitedNode)
-
+		metrics.BDMonitor.BeginVisit(node.Cid())
+		defer metrics.BDMonitor.FinishVisit(node.Cid())
 		// Skip internal nodes, they shouldn't have any file data
 		// (see the `balanced` package for more details).
 		if len(node.Links()) > 0 {
