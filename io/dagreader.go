@@ -253,6 +253,7 @@ func (dr *dagReader) readNodeDataBuffer(out []byte) int {
 // TODO: Check what part of the logic between the two functions
 // can be extracted away.
 func (dr *dagReader) writeNodeDataBuffer(w io.Writer) (int64, error) {
+
 	n, err := dr.currentNodeData.WriteTo(w)
 	if err != nil {
 		return n, err
