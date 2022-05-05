@@ -3,7 +3,9 @@ package helpers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"metrics"
 	"os"
 
 	dag "github.com/ipfs/go-merkledag"
@@ -142,8 +144,9 @@ func (db *DagBuilderHelper) GetCidBuilder() cid.Builder {
 // defined then a raw leaf will be returned.  Otherwise, it will create
 // and return `FSNodeOverDag` with `fsNodeType`.
 func (db *DagBuilderHelper) NewLeafNode(data []byte, fsNodeType pb.Data_DataType) (ipld.Node, error) {
+	BlockSizeLimit = metrics.BlockSizeLimit
 	if len(data) > BlockSizeLimit {
-		return nil, ErrSizeLimitExceeded
+		return nil, fmt.Errorf("blocksize %d exceed limit %d\n", len(data), BlockSizeLimit)
 	}
 
 	if db.rawLeaves {
