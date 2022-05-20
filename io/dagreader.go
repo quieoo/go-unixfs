@@ -9,6 +9,7 @@ import (
 	unixfs "github.com/ipfs/go-unixfs"
 	"io"
 	"metrics"
+	"pbitswap"
 )
 
 // Common errors
@@ -89,12 +90,13 @@ func NewDagReader(ctx context.Context, n ipld.Node, serv ipld.NodeGetter) (DagRe
 	ctxWithCancel, cancel := context.WithCancel(ctx)
 
 	return &dagReader{
-		ctx:       ctxWithCancel,
-		cancel:    cancel,
-		serv:      serv,
-		size:      size,
-		rootNode:  n,
-		dagWalker: ipld.NewWalker(ctxWithCancel, ipld.NewNavigableIPLDNode(n, serv)),
+		ctx:        ctxWithCancel,
+		cancel:     cancel,
+		serv:       serv,
+		size:       size,
+		rootNode:   n,
+		dagWalker:  ipld.NewWalker(ctxWithCancel, ipld.NewNavigableIPLDNode(n, serv)),
+		dispatcher: pbitswap.NewDisPatcher(ctxWithCancel, ipld.NewNavigableIPLDNode(n, serv)),
 	}, nil
 }
 
@@ -131,6 +133,8 @@ type dagReader struct {
 	// Passed to the `dagWalker` that will use it to request nodes.
 	// TODO: Revisit name.
 	serv ipld.NodeGetter
+
+	dispatcher *pbitswap.Dispatcher
 }
 
 // Size returns the total size of the data from the DAG structured file.
@@ -294,7 +298,8 @@ func (dr *dagReader) WriteTo(w io.Writer) (n int64, err error) {
 	// Iterate the DAG calling the passed `Visitor` function on every node
 	// to read its data into the `out` buffer, stop if there is an error or
 	// if the entire DAG is traversed (`EndOfDag`).
-	err = dr.dagWalker.Iterate(func(visitedNode ipld.NavigableNode) error {
+	visitFunction := func(visitedNode ipld.NavigableNode) error {
+		//err = dr.dagWalker.Iterate(func(visitedNode ipld.NavigableNode) error {
 		node := ipld.ExtractIPLDNode(visitedNode)
 		metrics.BDMonitor.BeginVisit(node.Cid())
 		defer metrics.BDMonitor.FinishVisit(node.Cid())
@@ -319,12 +324,15 @@ func (dr *dagReader) WriteTo(w io.Writer) (n int64, err error) {
 		}
 
 		return nil
-	})
-
+	}
+	if metrics.EnablePbitswap {
+		err = dr.dispatcher.Dispatch3(visitFunction)
+	} else {
+		err = dr.dagWalker.Iterate(visitFunction)
+	}
 	if err == ipld.EndOfDag {
 		return n, nil
 	}
-
 	return n, err
 }
 
