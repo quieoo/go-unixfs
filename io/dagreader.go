@@ -298,7 +298,7 @@ func (dr *dagReader) WriteTo(w io.Writer) (n int64, err error) {
 	// Iterate the DAG calling the passed `Visitor` function on every node
 	// to read its data into the `out` buffer, stop if there is an error or
 	// if the entire DAG is traversed (`EndOfDag`).
-	visitFunction := func(visitedNode ipld.NavigableNode) error {
+	err = dr.dispatcher.Dispatch3(func(visitedNode ipld.NavigableNode) error {
 		//err = dr.dagWalker.Iterate(func(visitedNode ipld.NavigableNode) error {
 		node := ipld.ExtractIPLDNode(visitedNode)
 		metrics.BDMonitor.BeginVisit(node.Cid())
@@ -324,15 +324,12 @@ func (dr *dagReader) WriteTo(w io.Writer) (n int64, err error) {
 		}
 
 		return nil
-	}
-	if metrics.EnablePbitswap {
-		err = dr.dispatcher.Dispatch3(visitFunction)
-	} else {
-		err = dr.dagWalker.Iterate(visitFunction)
-	}
+	})
+
 	if err == ipld.EndOfDag {
 		return n, nil
 	}
+
 	return n, err
 }
 
